@@ -1,0 +1,39 @@
+# Wait for Server 1 to be ready before continuing with metallb deployment
+- name: Wait for k8s nodes with node label 'server=true' to be ready, otherwise we cannot start metallb deployment
+  ansible.builtin.command:
+    cmd: "kubectl wait --for=condition=Ready nodes --selector server=true --timeout=600s"
+  register: nodes_ready
+  retries: 120
+  delay: 10
+  changed_when: true
+  become_user: "{{ ansible_user }}"
+  when: inventory_hostname == groups['servers'][0]
+
+
+- name: Install MetalLB via Helm
+  kubernetes.core.helm:
+    name: metallb
+    chart_ref: metallb
+    chart_repo_url: https://metallb.github.io/metallb
+    namespace: metallb-system
+    release_state: present
+    create_namespace: true
+  when: inventory_hostname == groups['servers'][0]
+
+- name: Apply MetalLB address pool configuration
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        namespace: metallb-system
+        name: config
+      data:
+        config: |
+          address-pools:
+            - name: default
+              protocol: layer2
+              addresses:
+                - "{{ lb_range }}"
+  when: inventory_hostname == groups['servers'][0]

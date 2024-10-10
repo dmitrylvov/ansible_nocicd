@@ -1,0 +1,40 @@
+---
+- name: Install Helm binary
+  ansible.builtin.shell: |
+    curl -fsSL -o /tmp/get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+    chmod 700 /tmp/get_helm.sh
+    /tmp/get_helm.sh
+  args:
+    creates: /usr/local/bin/helm
+  when: inventory_hostname == groups['servers'][0]
+
+- name: Add kube-vip helm repo
+  kubernetes.core.helm_repository:
+    name: kube-vip
+    repo_url: "https://kube-vip.github.io/helm-charts"
+  when: inventory_hostname == groups['servers'][0]
+
+- name: Install kube-vip via Helm
+  kubernetes.core.helm:
+    name: kube-vip
+    chart_ref: kube-vip
+    chart_repo_url: https://kube-vip.github.io/helm-charts
+    namespace: kube-system
+    release_state: present
+    release_values:
+      image:
+        tag: "{{ kube_vip_version }}"
+      vip:
+        interface: "{{ vip_interface }}"
+        address: "{{ vip }}"
+        enableARP: true
+      prometheus:
+        enable: true
+        port: 2112
+      leaderElection:
+        enable: true
+        leaseDuration: "5"
+        renewDeadline: "3"
+        retryPeriod: "1"
+    create_namespace: true
+  when: inventory_hostname == groups['servers'][0]
